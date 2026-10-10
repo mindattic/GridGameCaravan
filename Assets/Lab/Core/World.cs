@@ -62,6 +62,8 @@ namespace Lab.Core
         public int Seed;
         public float Width, Height;
         public List<Site> Sites = new List<Site>();
+        /// <summary>Where the town sets down: the middle of the region, so every view shows the world around it.</summary>
+        public V2 Start => new V2(Width / 2f, Height / 2f);
 
         /// <summary>Smooth terrain height 0..1 (value noise, 3 octaves) — hills for the 3D/iso demos, biome tint for the rest.</summary>
         public float HeightAt(float x, float y)
@@ -109,15 +111,15 @@ namespace Lab.Core
             while (w.Sites.Count < sites && guard++ < 5000)
             {
                 var p = new V2(rng.Range(6f, width - 6f), rng.Range(6f, height - 6f));
-                if (V2.Distance(p, new V2(14, height - 14)) < 16f) continue; // keep the town's start clear
+                if (V2.Distance(p, w.Start) < 16f) continue; // keep the town's start clear
                 bool ok = true;
                 foreach (var s in w.Sites) if (V2.Distance(s.Pos, p) < minGap) { ok = false; break; }
                 if (!ok) continue;
                 float roll = rng.Value();
                 var kind = roll < 0.34f ? SiteKind.FuelDepot : roll < 0.58f ? SiteKind.Mine : roll < 0.78f ? SiteKind.Wreck : roll < 0.95f ? SiteKind.Nest : SiteKind.Pass;
                 // Farther from the start = more dangerous (the surface gets meaner the deeper you go).
-                float depth = V2.Distance(p, new V2(14, height - 14)) / (float)Math.Sqrt(width * width + height * height);
-                int danger = Math.Max(1, Math.Min(5, 1 + (int)(depth * 5f + rng.Range(-0.6f, 0.9f))));
+                float depth = V2.Distance(p, w.Start) / ((float)Math.Sqrt(width * width + height * height) / 2f);
+                int danger = Math.Max(1, Math.Min(5, 1 + (int)(depth * 4.5f + rng.Range(-0.6f, 0.9f))));
                 var site = new Site { Id = id++, Kind = kind, Pos = p, Danger = danger };
                 switch (kind)
                 {

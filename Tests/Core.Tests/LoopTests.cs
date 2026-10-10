@@ -37,7 +37,7 @@ namespace Lab.Tests
             for (int i = 0; i < 2000 && l.Phase == LoopPhase.Walking; i++) l.Tick(0.05f);
             Assert.True(l.Town.Stranded);
             Assert.Equal(LoopPhase.Exploring, l.Phase);
-            float moved = V2.Distance(l.Town.Pos, new V2(14, l.World.Height - 14));
+            float moved = V2.Distance(l.Town.Pos, l.World.Start);
             Assert.Equal(5f / l.Town.FuelPerUnit, moved, 1);
         }
 
@@ -64,7 +64,7 @@ namespace Lab.Tests
         public void The_route_graph_connects_the_start_to_every_site()
         {
             var w = WorldGen.Create(5);
-            var g = RouteGraph.Build(w, new V2(14, w.Height - 14));
+            var g = RouteGraph.Build(w, w.Start);
             int reachable = w.Sites.Count(s => g.Path(0, s.Id) != null);
             Assert.True(reachable >= w.Sites.Count - 1, $"{reachable}/{w.Sites.Count}");
         }

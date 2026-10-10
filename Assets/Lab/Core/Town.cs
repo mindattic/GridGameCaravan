@@ -52,7 +52,7 @@ namespace Lab.Core
         public LabSession(World world)
         {
             World = world;
-            Town.Pos = new V2(14, world.Height - 14);
+            Town.Pos = world.Start;
             Reveal(Town.Pos, 18f); // you always see your immediate surroundings
         }
 
