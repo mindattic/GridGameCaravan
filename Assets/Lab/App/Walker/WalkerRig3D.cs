@@ -46,15 +46,29 @@ namespace Lab.App
             return w;
         }
 
+        /// <summary>Unity's built-in primitive meshes, without CreatePrimitive's collider (physics is stripped from WebGL builds).</summary>
+        private static Mesh MeshOf(PrimitiveType t) => Resources.GetBuiltinResource<Mesh>(t switch
+        {
+            PrimitiveType.Cube => "Cube.fbx",
+            PrimitiveType.Cylinder => "Cylinder.fbx",
+            PrimitiveType.Sphere => "Sphere.fbx",
+            _ => "Cube.fbx",
+        });
+
+        private static GameObject Primitive(PrimitiveType t, Material m, string name)
+        {
+            var g = new GameObject(name);
+            g.AddComponent<MeshFilter>().sharedMesh = MeshOf(t);
+            g.AddComponent<MeshRenderer>().sharedMaterial = m;
+            return g;
+        }
+
         private GameObject Part(PrimitiveType t, Transform parent, Vector3 pos, Vector3 scale, Color c, string name)
         {
-            var g = GameObject.CreatePrimitive(t);
-            g.name = name;
-            Destroy(g.GetComponent<Collider>());
+            var g = Primitive(t, Mat(c), name);
             g.transform.SetParent(parent, false);
             g.transform.localPosition = pos;
             g.transform.localScale = scale;
-            g.GetComponent<MeshRenderer>().sharedMaterial = Mat(c);
             return g;
         }
 
@@ -212,9 +226,7 @@ namespace Lab.App
                 smokeMat ??= Mat(new Color(0.6f, 0.6f, 0.63f));
                 foreach (var c in new[] { new Vector3(-3.6f, 8.4f, 1.6f), new Vector3(-2.4f, 7.4f, -2.2f) })
                 {
-                    var g = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    Destroy(g.GetComponent<Collider>());
-                    g.GetComponent<MeshRenderer>().sharedMaterial = smokeMat;
+                    var g = Primitive(PrimitiveType.Sphere, smokeMat, "smoke");
                     g.transform.position = body.TransformPoint(c);
                     g.transform.localScale = Vector3.one * 0.8f;
                     smoke.Add((g.transform, 0f));
