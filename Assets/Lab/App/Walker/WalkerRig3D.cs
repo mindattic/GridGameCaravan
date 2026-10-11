@@ -191,7 +191,9 @@ namespace Lab.App
         {
             var hip = body.TransformPoint(HipLocal[i]);
             var f = foot[i];
-            var outward = transform.TransformDirection(new Vector3(Mathf.Sign(HipLocal[i].x), 0.6f, 0f));
+            // All four knees kink the same way — rearward and up — like a real quadruped's legs, not mirrored
+            // front-to-back (Mathf.Sign(HipLocal[i].x) was bending the front legs forward instead).
+            var outward = transform.TransformDirection(new Vector3(-1f, 0.6f, 0f));
             var k = Ik(hip, f, UpperLeg, LowerLeg, outward);
             Segment(upper[i], hip, k);
             Segment(lower[i], k, f);
