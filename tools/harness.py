@@ -63,7 +63,13 @@ def launch(run, width=585, height=1266, extra=(), fresh=False):
     args = [EXE, "-automation", str(PORT), "-artifacts", art, "-saveRoot", saves,
             "-screen-width", str(width), "-screen-height", str(height), "-screen-fullscreen", "0",
             "-logFile", os.path.join(art, "player.log"), *extra]
-    subprocess.Popen(args, cwd=ROOT)
+    # Automated runs skip MindAttic.Capture (capture.json defaults it on): harness launches are
+    # frequent and short-lived, and a lossless recording of every labcheck/smoke run would flood
+    # R:\Recording for no benefit. MINDATTIC_CAPTURE=0 is a hard kill switch, so passing -capture
+    # in `extra` would NOT re-enable it here; a deliberately recorded run should set the env var
+    # itself instead of going through launch().
+    env = {**os.environ, "MINDATTIC_CAPTURE": "0"}
+    subprocess.Popen(args, cwd=ROOT, env=env)
     for _ in range(60):
         if alive():
             return art
