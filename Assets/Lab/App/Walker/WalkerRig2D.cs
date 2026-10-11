@@ -327,11 +327,11 @@ namespace Lab.App
             var outUpper = Outward(k - a);
             var outLower = Outward(f - k);
 
-            // The thigh and shin are tapered, muscled shapes — thick where they root into the hip and knee and
-            // narrowing toward the next joint, with a slight belly rather than a constant-width tube — an armored
-            // plate over a real animal's limb, not a rounded bar.
-            TaperedLimb(p2, a, k, 1.05f * w, 0.5f * w, 0.22f * w, dark, steel);
-            TaperedLimb(p2, k, f, 0.68f * w, 0.32f * w, 0.1f * w, dark, steel);
+            // The thigh and shin are built from straight-edged armor plates bolted together at a seam, each panel
+            // tapering toward the next joint — the silhouette of a real limb (thick at the root, narrowing toward the
+            // joint below it), fabricated as hardware rather than cast as one smooth, soft tube.
+            PlatedLimb(p2, a, k, 1.05f * w, 0.72f * w, 0.5f * w, dark, steel, brassDark);
+            PlatedLimb(p2, k, f, 0.68f * w, 0.46f * w, 0.32f * w, dark, steel, brassDark);
             for (int r = 1; r <= 2; r++) Circle(p2, Vector2.Lerp(a, k, r / 3f), 0.16f * w, brassDark);
             for (int r = 1; r <= 2; r++) Circle(p2, Vector2.Lerp(k, f, r / 3f), 0.14f * w, brassDark);
 
@@ -356,11 +356,19 @@ namespace Lab.App
             // already drawn on, just thicker and a shade darker, so it reads as the heavy part that actually bears the
             // weight. Built this way it can never detach, twist or taper to a point: it has no direction of its own to
             // get wrong, only a point along a line segment that was already correct.
+            // Flat-edged, flaring slightly toward the sole like a real hoof capsule — plated to match the limb above it
+            // rather than a rounded cap, so the whole leg reads as one fabricated assembly.
             var ankleJoint = Vector2.Lerp(k, f, 0.72f);
-            Line(p2, ankleJoint, f, dark, 2.3f * w);
-            Line(p2, ankleJoint, f, iron, 1.85f * w);
-            Circle(p2, ankleJoint, 0.3f * w, brassDark); // the joint the hoof flexes on, where it meets the shin
-            Circle(p2, ankleJoint, 0.16f * w, brass);
+            var hoofDir = f - ankleJoint;
+            float hoofLen = hoofDir.magnitude;
+            var hu = hoofLen > 1e-4f ? hoofDir / hoofLen : Vector2.down;
+            var hn = new Vector2(-hu.y, hu.x);
+            float rNear = 0.46f * w, rFar = 0.6f * w;
+            Vector2[] HoofQuad(float pad) => new[] { ankleJoint + hn * (rNear + pad), f + hn * (rFar + pad), f - hn * (rFar + pad), ankleJoint - hn * (rNear + pad) };
+            Poly(p2, HoofQuad(0.6f), dark);
+            Poly(p2, HoofQuad(0f), iron);
+            Circle(p2, ankleJoint, 0.28f * w, brassDark); // the joint the hoof flexes on, where it meets the shin
+            Circle(p2, ankleJoint, 0.15f * w, brass);
             // a flat sole at the very tip instead of a taper, so the foot plants flat rather than pointing — it
             // flexes (breaks over) during swing only, rotating in place around the contact point itself.
             var shinUnit = (f - ankleJoint).sqrMagnitude > 1e-6f ? (f - ankleJoint).normalized : Vector2.down;
@@ -405,31 +413,32 @@ namespace Lab.App
             p.BeginPath(); p.Arc(c, r, Angle.Degrees(0), Angle.Degrees(360)); p.ClosePath(); p.Fill();
         }
 
-        /// <summary>A tapered, slightly muscled capsule from `a` (radius `rA`) to `b` (radius `rB`), bulging by `bulge`
-        /// at its midpoint — an armored limb segment, not a constant-width rod.</summary>
-        private static void TaperedLimb(Painter2D p, Vector2 a, Vector2 b, float rA, float rB, float bulge, Color outline, Color fill)
+        /// <summary>Two flat, straight-edged armor plates bolted in sequence from `a` (radius `rA`) through a seam at
+        /// `rMid` to `b` (radius `rB`) — built hardware with a visible joint between its own parts, not a smooth
+        /// capsule with a soft, organic taper.</summary>
+        private static void PlatedLimb(Painter2D p, Vector2 a, Vector2 b, float rA, float rMid, float rB, Color outline, Color fill, Color seam)
         {
-            var dir = b - a;
-            float len = dir.magnitude;
-            if (len < 1e-4f) return;
-            var u = dir / len;
-            var n = new Vector2(-u.y, u.x);
-            const int N = 6;
-            Vector2[] Build(float pad)
+            var full = b - a;
+            if (full.sqrMagnitude < 1e-6f) return;
+            var mid = Vector2.Lerp(a, b, 0.46f);
+            void Panel(Vector2 p0, Vector2 p1, float r0, float r1)
             {
-                var pts = new Vector2[2 * (N + 1)];
-                for (int i = 0; i <= N; i++)
-                {
-                    float t = i / (float)N;
-                    float r = Mathf.Lerp(rA, rB, t) + Mathf.Sin(t * Mathf.PI) * bulge + pad;
-                    var c = Vector2.Lerp(a, b, t);
-                    pts[i] = c + n * r;
-                    pts[2 * N + 1 - i] = c - n * r;
-                }
-                return pts;
+                var dir = p1 - p0;
+                float len = dir.magnitude;
+                if (len < 1e-4f) return;
+                var u = dir / len;
+                var n = new Vector2(-u.y, u.x);
+                Vector2[] Quad(float pad) => new[] { p0 + n * (r0 + pad), p1 + n * (r1 + pad), p1 - n * (r1 + pad), p0 - n * (r0 + pad) };
+                Poly(p, Quad(Mathf.Max(r0, r1) * 0.15f + 0.6f), outline);
+                Poly(p, Quad(0f), fill);
             }
-            Poly(p, Build(Mathf.Max(rA, rB) * 0.18f + 0.6f), outline);
-            Poly(p, Build(0f), fill);
+            Panel(a, mid, rA, rMid);
+            Panel(mid, b, rMid, rB);
+            // the seam where the two plates bolt together, with a rivet on each side
+            var fn = new Vector2(-full.y, full.x).normalized;
+            Line(p, mid + fn * (rMid + 0.3f), mid - fn * (rMid + 0.3f), seam, Mathf.Max(0.8f, rMid * 0.16f));
+            Circle(p, mid + fn * rMid * 0.55f, rMid * 0.14f, seam);
+            Circle(p, mid - fn * rMid * 0.55f, rMid * 0.14f, seam);
         }
 
         /// <summary>A toothed cog: rim with teeth, a bolted hub, and a centre pin. Spins with `rot`.</summary>
