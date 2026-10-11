@@ -56,6 +56,7 @@ namespace Lab.App
             Camera.cullingMask = 0;
             BuildPanel();
             ShowMenu();
+            LabDemoMode.TryStart(this);
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
             LabAutomation.TryStart(this);
 #endif

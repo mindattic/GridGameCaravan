@@ -121,7 +121,7 @@ namespace Lab.App
                 upper[i] = Part(PrimitiveType.Cylinder, transform, Vector3.zero, new Vector3(1.2f, UpperLeg / 2f, 1.2f), steel, "upper" + i).transform;
                 lower[i] = Part(PrimitiveType.Cylinder, transform, Vector3.zero, new Vector3(0.95f, LowerLeg / 2f, 0.95f), steel, "lower" + i).transform;
                 knee[i] = Part(PrimitiveType.Sphere, transform, Vector3.zero, Vector3.one * 1.5f, brass, "knee" + i).transform;
-                pad[i] = Part(PrimitiveType.Cylinder, transform, Vector3.zero, new Vector3(2.0f, 0.25f, 2.0f), iron, "foot" + i).transform;
+                pad[i] = Part(PrimitiveType.Cylinder, transform, Vector3.zero, new Vector3(1.8f, 0.25f, 1.8f), iron, "foot" + i).transform;
             }
         }
 

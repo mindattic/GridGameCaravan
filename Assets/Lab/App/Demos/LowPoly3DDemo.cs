@@ -80,7 +80,7 @@ namespace Lab.App
                 if (pressAt == null || e.pressedButtons == 0) return;
                 float dx = e.localPosition.x - pressAt.Value.x;
                 if (Mathf.Abs(dx) > 24f) dragged = true;
-                if (dragged) yaw = pressYaw + dx * 0.25f;
+                if (dragged) yaw = pressYaw + dx * 0.07f;
             });
             view.RegisterCallback<PointerUpEvent>(_ => pressAt = null);
             lastPos = L.Town.Pos;
@@ -161,11 +161,13 @@ namespace Lab.App
             }
         }
 
+        private float CameraDistance => L.Phase == LoopPhase.Battle || L.Phase == LoopPhase.Riding ? 96f : 160f;
+
         private void PlaceCamera(float k)
         {
             var target = walker.transform.position + Vector3.up * 2f;
             var dir = Quaternion.Euler(52f, yaw, 0f) * Vector3.back;
-            var want = target + dir * 96f;
+            var want = target + dir * CameraDistance;
             var cam = App.Camera.transform;
             cam.position = Vector3.Lerp(cam.position, want, k);
             cam.LookAt(target);
@@ -225,7 +227,7 @@ namespace Lab.App
             if (v.Length > 0.001f)
             {
                 var want = Quaternion.Euler(0, -Mathf.Atan2(v.Y, v.X) * Mathf.Rad2Deg, 0);
-                walker.transform.rotation = Quaternion.Slerp(walker.transform.rotation, want, 1f - Mathf.Exp(-dt * 3f));
+                walker.transform.rotation = Quaternion.Slerp(walker.transform.rotation, want, 1f - Mathf.Exp(-dt * 2.85f));
             }
             if (L.Phase == LoopPhase.Walking && V2.Distance(L.Town.Pos, lastSeen) > 1.5f) { clear.Add((L.Town.Pos, 18f)); lastSeen = L.Town.Pos; RecolorFog(); }
             lastPos = L.Town.Pos;
