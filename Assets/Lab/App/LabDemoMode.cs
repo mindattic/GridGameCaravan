@@ -8,9 +8,11 @@ using UnityEngine.UIElements;
 namespace Lab.App
 {
     /// <summary>
-    /// Attract mode (start with <c>-demo</c>): cycles every traversal demo, playing the shared loop (scan → select
-    /// → walk/send → battle → haul) on its own so a first-time viewer gets a feel for every PoC without touching
-    /// anything. Loops the whole catalog until a tap hands control back to the player.
+    /// Attract mode (start with <c>-demo</c> or <c>-autoplay</c>) — this is the tour: cycles every
+    /// traversal demo, playing the shared loop (scan → select → walk/send → battle → haul) on its own
+    /// so a first-time viewer gets a feel for every PoC without touching anything. Loops the whole
+    /// catalog until a tap hands control back to the player. <c>-autoplay</c> is the flag name shared
+    /// across every MindAttic Unity project; <c>-demo</c> stays as an alias.
     /// </summary>
     public sealed class LabDemoMode : MonoBehaviour
     {
@@ -22,7 +24,8 @@ namespace Lab.App
 
         public static void TryStart(LabApp app)
         {
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-demo") < 0) return;
+            var args = Environment.GetCommandLineArgs();
+            if (Array.IndexOf(args, "-demo") < 0 && Array.IndexOf(args, "-autoplay") < 0) return;
             var s = app.gameObject.AddComponent<LabDemoMode>();
             s.app = app;
             // Registered here, not OnEnable: AddComponent() calls OnEnable synchronously, before `app` is assigned.
