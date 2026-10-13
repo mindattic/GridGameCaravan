@@ -33,3 +33,9 @@ python tools/make_lab_icons.py                         # pixel icons (game-icons
 Everything is code-built (`Assets/Lab/App/LabApp.cs` boots it), as in GridGameGaiden. The walker is drawn from
 scratch (`Assets/Lab/App/Walker/WalkerRig2D.cs`): a small 3D model projected side-on or isometric with Painter2D.
 The owner's mood board is a style reference only.
+
+## Capture
+
+[MindAttic.Capture](../MindAttic.Capture) auto-starts in Editor Play sessions and development
+builds (not gated by `-capture`). Currently disabled project-wide: `"enabled": false` in
+`Assets/StreamingAssets/capture.json`. Flip it to `true` (or remove the key) to re-enable.
