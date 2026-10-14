@@ -36,6 +36,8 @@ namespace Lab.EditorTools
 
         public static void BuildWindowsDev() => Build(BuildTarget.StandaloneWindows64, "Build/Windows/GridGameCaravan.exe", true);
 
+        public static void BuildWindowsRelease() => Build(BuildTarget.StandaloneWindows64, "Build/WindowsRelease/GridGameCaravan.exe", false);
+
         public static void BuildWebGL()
         {
             PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
