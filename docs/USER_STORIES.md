@@ -35,3 +35,4 @@ _Nothing recorded yet._
 | GGC-T12 | 2026-10-16 | chore | open | Clean up code and docs: remove dead code, stale comments and outdated or duplicated docs, and simplify where behaviour doesn't change (/simplify); tests stay green | user request 2026-10-16: approved repo sweep |
 | GGC-T13 | 2026-10-16 | docs | open | Bring README.md up to date with the code as it is now (what it is, setup, usage, commands, current state), following codex-standard/README-STYLE.md; README.htm regenerated if the repo has one | user request 2026-10-16: approved repo sweep |
 | GGC-T14 | 2026-10-16 | docs | closed | Update USER_STORIES.md | — |
+| GGC-T15 | 2026-10-17 | feature | closed | Walker rig: per-leg terrain contact, flat stomping hooves, slow turn-in-place, and a chamfered hull base, so the isometric town reads as a heavy quadruped instead of developer art | manual play test, Isometric Expanse |

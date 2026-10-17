@@ -22,13 +22,24 @@ namespace Lab.App
         public float PixelsPerUnit = 6f;
         /// <summary>Side view: +1 faces right, −1 left.</summary>
         public int Facing = 1;
-        /// <summary>Iso view: heading in radians (0 = toward +x).</summary>
+        /// <summary>Iso view: the heading to turn toward, in radians (0 = toward +x). The rig doesn't snap to this —
+        /// it turns toward it at <see cref="TurnRateDegPerSec"/>; read <see cref="RenderHeading"/> for the actual
+        /// drawn orientation.</summary>
         public float Heading;
+        /// <summary>How fast the hull turns to face a new heading, in degrees/sec — slow and deliberate, not a snap.</summary>
+        public float TurnRateDegPerSec = 70f;
         /// <summary>Where the ground line sits, as a fraction of the element height.</summary>
         public float Ground = 0.9f;
         public float GaitPeriod = 2.4f;
+        /// <summary>Rig-local foot offset (forward x, lateral z, in rig units) → the ground height there, in rig
+        /// units. Null (the default) means flat ground at y=0, for demos with no real terrain to sample.</summary>
+        public Func<float, float, float> GroundAt;
 
-        private float t, walkBlend, smokeTimer, impactTimer = 999f, bodyBob;
+        private float t, walkBlend, smokeTimer, impactTimer = 999f, bodyBob, terrainLift, terrainRoll, terrainPitch;
+        private float renderHeading;
+        private bool headingInit;
+        /// <summary>The hull's actual drawn orientation — lags <see cref="Heading"/>, turning toward it gradually.</summary>
+        public float RenderHeading => renderHeading;
         private readonly float[] lastPhase = new float[4];
         private readonly List<Puff> smoke = new List<Puff>();
         private readonly List<Puff> dust = new List<Puff>();
@@ -41,6 +52,11 @@ namespace Lab.App
 
         // ── The model (rig units: x forward, y up, z lateral) ────────────────────────
         private struct Box { public Vector3 C, S; public Color Col; public bool Roof; public Color RoofCol; public bool Windows; }
+        // Declared before Body: static field initializers run in source order, and BuildBody() (which Body's
+        // initializer calls) reads these — after Body, they'd still be default (transparent black) when read.
+        private static readonly Color StoneCol = new Color(0.62f, 0.58f, 0.52f);
+        private static readonly Color BrassCol = new Color(0.55f, 0.43f, 0.28f);
+        private static readonly Color IronCol = new Color(0.34f, 0.33f, 0.34f);
         private static readonly List<Box> Body = BuildBody();
         private static readonly Vector3[] Hips = { new Vector3(3.6f, 7.4f, 3.2f), new Vector3(3.6f, 7.4f, -3.2f), new Vector3(-3.6f, 7.4f, 3.2f), new Vector3(-3.6f, 7.4f, -3.2f) };
         private static readonly float[] PhaseOffset = { 0f, 0.5f, 0.5f, 0f }; // FL+BR, FR+BL
@@ -55,16 +71,15 @@ namespace Lab.App
 
         private static List<Box> BuildBody()
         {
-            var stone = new Color(0.62f, 0.58f, 0.52f);
-            var brass = new Color(0.55f, 0.43f, 0.28f);
-            var iron = new Color(0.34f, 0.33f, 0.34f);
+            var stone = StoneCol;
+            var brass = BrassCol;
+            var iron = IronCol;
             var redRoof = new Color(0.62f, 0.27f, 0.20f);
             var slate = new Color(0.32f, 0.37f, 0.48f);
             var b = new List<Box>
             {
-                new Box { C = new Vector3(0, 6.4f, 0), S = new Vector3(7.4f, 1.4f, 5.6f), Col = iron },                 // keel
-                new Box { C = new Vector3(0, 7.9f, 0), S = new Vector3(10.6f, 1.8f, 8.0f), Col = brass },               // platform
-                new Box { C = new Vector3(0, 9.0f, 0), S = new Vector3(10.2f, 0.4f, 7.6f), Col = stone },               // deck
+                // keel, platform and deck are drawn separately as chamfered prisms (see AddChamferedPrism) for a
+                // rounded hull edge instead of a sharp right-angle box.
                 // tier 1: a ring of houses
                 new Box { C = new Vector3(3.6f, 10.4f, 2.6f), S = new Vector3(2.4f, 2.4f, 2.2f), Col = stone, Roof = true, RoofCol = redRoof, Windows = true },
                 new Box { C = new Vector3(3.8f, 10.0f, -2.4f), S = new Vector3(2.2f, 1.8f, 2.4f), Col = stone, Roof = true, RoofCol = slate, Windows = true },
@@ -110,6 +125,10 @@ namespace Lab.App
         {
             float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
             t += dt;
+            // The hull turns to face a new heading like a heavy thing actually pivoting on its legs, not a sprite
+            // flipping instantly — snap only on the very first tick, since there's no prior orientation to turn from.
+            if (!headingInit) { renderHeading = Heading; headingInit = true; }
+            else renderHeading = Mathf.Deg2Rad * Mathf.MoveTowardsAngle(renderHeading * Mathf.Rad2Deg, Heading * Mathf.Rad2Deg, TurnRateDegPerSec * dt);
             walkBlend = Mathf.MoveTowards(walkBlend, Walking ? 1f : 0f, dt * 1.5f);
             float stride = 3.0f * walkBlend;
             for (int i = 0; i < 4; i++)
@@ -130,7 +149,12 @@ namespace Lab.App
                     fx = Mathf.Lerp(-stride / 2f, stride / 2f, Mathf.SmoothStep(0f, 1f, Mathf.Pow(k, 0.82f)));
                     fy = Mathf.Sin(Mathf.Pow(k, 0.72f) * Mathf.PI) * Lift * walkBlend;
                 }
-                feet[i] = new Vector3(Hips[i].x + fx, fy, Hips[i].z * 1.18f);
+                // Each leg samples the ground at its own local offset — not a shared body height — so a leg
+                // standing on a step up or a cliff edge plants where its own foot actually lands, independent of
+                // what the other three are doing.
+                float lateralZ = Hips[i].z * 1.18f;
+                float groundY = GroundAt != null ? GroundAt(Hips[i].x + fx, lateralZ) : 0f;
+                feet[i] = new Vector3(Hips[i].x + fx, groundY + fy, lateralZ);
                 // The hoof block sits flat on the ground through stance and only tilts (toe breaking over toward the
                 // cannon bone) while clearing the ground mid-swing — never below flat, so the sole is always the
                 // lowest point of the leg.
@@ -143,6 +167,14 @@ namespace Lab.App
                 }
                 lastPhase[i] = p;
             }
+            // The hull reads the ground the same way its individual feet do: lifted by their average height,
+            // tipped by the slope between front/back and left/right pairs — so four legs each landing on
+            // different terrain actually shows up as the whole town tilting, not just as feet floating apart.
+            terrainLift = (feet[0].y + feet[1].y + feet[2].y + feet[3].y) / 4f;
+            float frontY = (feet[0].y + feet[1].y) / 2f, backY = (feet[2].y + feet[3].y) / 2f;
+            float leftY = (feet[0].y + feet[2].y) / 2f, rightY = (feet[1].y + feet[3].y) / 2f;
+            terrainPitch = Mathf.Atan2(frontY - backY, 7.2f);
+            terrainRoll = Mathf.Atan2(leftY - rightY, 6.4f);
             // Body motion isn't a smooth float: it's a sharp compression at the instant a foot lands (the whole town's
             // mass arriving on that leg) followed by a slower spring-back, the same snap-then-ease shape real footfalls
             // have — rather than a continuous sine bob that never actually reads as an impact.
@@ -177,15 +209,15 @@ namespace Lab.App
             if (onBody)
             {
                 float w = walkBlend;
-                float roll = Mathf.Sin(t / GaitPeriod * Mathf.PI * 2f) * 0.035f * w;
-                float pitch = Mathf.Sin(t / GaitPeriod * Mathf.PI * 4f) * 0.012f * w;
+                float roll = Mathf.Sin(t / GaitPeriod * Mathf.PI * 2f) * 0.035f * w + terrainRoll;
+                float pitch = Mathf.Sin(t / GaitPeriod * Mathf.PI * 4f) * 0.012f * w + terrainPitch;
                 p = new Vector3(p.x, p.y * Mathf.Cos(roll) - p.z * Mathf.Sin(roll), p.y * Mathf.Sin(roll) + p.z * Mathf.Cos(roll));
                 p = new Vector3(p.x * Mathf.Cos(pitch) - p.y * Mathf.Sin(pitch), p.x * Mathf.Sin(pitch) + p.y * Mathf.Cos(pitch), p.z);
-                p.y += bodyBob;
+                p.y += bodyBob + terrainLift;
             }
             if (Mode == View.Iso)
             {
-                float c = Mathf.Cos(Heading), s = Mathf.Sin(Heading);
+                float c = Mathf.Cos(renderHeading), s = Mathf.Sin(renderHeading);
                 p = new Vector3(p.x * c - p.z * s, p.y, p.x * s + p.z * c);
             }
             else p.x *= Facing;
@@ -224,6 +256,10 @@ namespace Lab.App
             for (int i = 0; i <= 24; i++) { float a = i / 24f * Mathf.PI * 2f; var q = sc + new Vector2(Mathf.Cos(a) * rw, Mathf.Sin(a) * rh); if (i == 0) p2.MoveTo(q); else p2.LineTo(q); }
             p2.Fill();
 
+            // The hull's base — keel, platform, deck — as chamfered prisms: a rounded hull edge, not a right-angle box.
+            AddChamferedPrism(new Vector3(0, 6.4f, 0), 3.7f, 2.8f, 5.7f, 7.1f, 1.0f, IronCol);
+            AddChamferedPrism(new Vector3(0, 7.9f, 0), 5.3f, 4.0f, 7.0f, 8.8f, 1.6f, BrassCol);
+            AddChamferedPrism(new Vector3(0, 9.0f, 0), 5.1f, 3.8f, 8.8f, 9.2f, 1.5f, StoneCol);
             foreach (var b in Body) AddBox(b);
             for (int i = 0; i < 4; i++) items.Add(new Item { Kind = 1, Index = i, Depth = Depth(BodyToScreenSpace(Vector3.Lerp(Hips[i], feet[i], 0.5f), false)) });
             items.Sort((a, b) => a.Depth.CompareTo(b.Depth));
@@ -273,6 +309,51 @@ namespace Lab.App
                     var wa = BodyToScreenSpace(a, true); var wb = BodyToScreenSpace(bb, true); var wp = BodyToScreenSpace(apex, true);
                     items.Add(new Item { Kind = 0, Poly = new[] { Project(wa), Project(wb), Project(wp) }, Fill = Shade(b.RoofCol, wn), Depth = Depth((wa + wb + wp) / 3f) + 0.002f });
                 }
+            }
+        }
+
+        /// <summary>A box whose four vertical edges are cut back by <paramref name="chamfer"/>, turning its horizontal
+        /// cross-section from a rectangle into an octagon — a rounded hull edge instead of a sharp right angle,
+        /// still built entirely from flat faces (one per octagon edge, plus the flat octagon top).</summary>
+        private void AddChamferedPrism(Vector3 center, float hw, float hd, float y0, float y1, float chamfer, Color col)
+        {
+            Vector2[] pts =
+            {
+                new Vector2(-hw + chamfer, -hd), new Vector2(hw - chamfer, -hd),
+                new Vector2(hw, -hd + chamfer), new Vector2(hw, hd - chamfer),
+                new Vector2(hw - chamfer, hd), new Vector2(-hw + chamfer, hd),
+                new Vector2(-hw, hd - chamfer), new Vector2(-hw, -hd + chamfer),
+            };
+            int n = pts.Length;
+            var topWorld = new Vector3[n];
+            var topScreen = new Vector2[n];
+            var topCentre = Vector3.zero;
+            for (int i = 0; i < n; i++)
+            {
+                var local = new Vector3(center.x + pts[i].x, y1, center.z + pts[i].y);
+                topWorld[i] = BodyToScreenSpace(local, true);
+                topCentre += topWorld[i];
+            }
+            // The top face is always visible from this camera (both views look down at the deck), same as AddBox's
+            // top/bottom faces: no culling test needed, just draw it.
+            var topNormal = Mode == View.Side ? Vector3.up : BodyToScreenSpace(Vector3.up, false);
+            for (int i = 0; i < n; i++) topScreen[i] = Project(topWorld[i]);
+            items.Add(new Item { Kind = 0, Poly = topScreen, Fill = Shade(col, topNormal), Depth = Depth(topCentre / n) - 0.001f });
+            for (int i = 0; i < n; i++)
+            {
+                var a2 = pts[i]; var b2 = pts[(i + 1) % n];
+                var edge = b2 - a2;
+                var normal2 = new Vector2(edge.y, -edge.x).normalized;
+                var n3Local = new Vector3(normal2.x, 0, normal2.y);
+                var n3 = Mode == View.Side ? n3Local : BodyToScreenSpace(n3Local, false);
+                if (Vector3.Dot(n3, TowardViewer) <= 0.02f) continue;
+                var wa0 = BodyToScreenSpace(new Vector3(center.x + a2.x, y0, center.z + a2.y), true);
+                var wb0 = BodyToScreenSpace(new Vector3(center.x + b2.x, y0, center.z + b2.y), true);
+                var wa1 = BodyToScreenSpace(new Vector3(center.x + a2.x, y1, center.z + a2.y), true);
+                var wb1 = BodyToScreenSpace(new Vector3(center.x + b2.x, y1, center.z + b2.y), true);
+                var poly = new[] { Project(wa0), Project(wb0), Project(wb1), Project(wa1) };
+                var centre = (wa0 + wb0 + wb1 + wa1) / 4f;
+                items.Add(new Item { Kind = 0, Poly = poly, Fill = Shade(col, n3), Depth = Depth(centre) - 0.001f });
             }
         }
 
@@ -358,26 +439,32 @@ namespace Lab.App
             // get wrong, only a point along a line segment that was already correct.
             // Flat-edged, flaring slightly toward the sole like a real hoof capsule — plated to match the limb above it
             // rather than a rounded cap, so the whole leg reads as one fabricated assembly.
-            var ankleJoint = Vector2.Lerp(k, f, 0.72f);
+            // A heavy stomping pad, not a tapered hoof: it overshoots the ankle pivot (padTip, past f) instead of
+            // tapering to a point at it, and flares wider at the tip than at the ankle — the blunt, heavy foot a
+            // town this size should actually plant, not a horse's hoof. Its flat side (hn) always lies along the
+            // ground plane — Vector2.right, never a direction derived from the shin — so the pad rests flush on
+            // the ground regardless of how steeply the leg above it happens to be leaning, the way a real ankle
+            // joint articulates to keep the sole flat instead of planting at the shin's own angle.
+            var ankleJoint = Vector2.Lerp(k, f, 0.68f);
             var hoofDir = f - ankleJoint;
             float hoofLen = hoofDir.magnitude;
             var hu = hoofLen > 1e-4f ? hoofDir / hoofLen : Vector2.down;
-            var hn = new Vector2(-hu.y, hu.x);
-            float rNear = 0.46f * w, rFar = 0.6f * w;
-            Vector2[] HoofQuad(float pad) => new[] { ankleJoint + hn * (rNear + pad), f + hn * (rFar + pad), f - hn * (rFar + pad), ankleJoint - hn * (rNear + pad) };
-            Poly(p2, HoofQuad(0.6f), dark);
+            var hn = Vector2.right;
+            var padTip = f + hu * (0.55f * w);
+            float rNear = 0.66f * w, rFar = 1.05f * w;
+            Vector2[] HoofQuad(float pad) => new[] { ankleJoint + hn * (rNear + pad), padTip + hn * (rFar + pad), padTip - hn * (rFar + pad), ankleJoint - hn * (rNear + pad) };
+            Poly(p2, HoofQuad(0.75f), dark);
             Poly(p2, HoofQuad(0f), iron);
-            Circle(p2, ankleJoint, 0.28f * w, brassDark); // the joint the hoof flexes on, where it meets the shin
-            Circle(p2, ankleJoint, 0.15f * w, brass);
-            // a flat sole at the very tip instead of a taper, so the foot plants flat rather than pointing — it
-            // flexes (breaks over) during swing only, rotating in place around the contact point itself.
-            var shinUnit = (f - ankleJoint).sqrMagnitude > 1e-6f ? (f - ankleJoint).normalized : Vector2.down;
-            var solePerp = new Vector2(-shinUnit.y, shinUnit.x);
+            Circle(p2, ankleJoint, 0.34f * w, brassDark); // the joint the pad flexes on, where it meets the shin
+            Circle(p2, ankleJoint, 0.19f * w, brass);
+            // Flat at rest — the same ground-plane baseline (Vector2.right) as the pad above — and only tilts
+            // during swing, breaking over toward the shin as it clears the ground, never below flat.
+            var solePerp = Vector2.right;
             if (Vector2.Dot(solePerp, hintScreen) < 0f) solePerp = -solePerp;
             float tilt = footAngle[i] * Mathf.Deg2Rad;
             float c = Mathf.Cos(tilt), s = Mathf.Sin(tilt);
             var sole = new Vector2(solePerp.x * c - solePerp.y * s, solePerp.x * s + solePerp.y * c);
-            Line(p2, f + sole * 0.55f * w, f - sole * 0.55f * w, dark, 0.55f * w);
+            Line(p2, padTip + sole * 0.9f * w, padTip - sole * 0.9f * w, dark, 0.9f * w);
         }
 
         private static Vector3 Ik(Vector3 hip, Vector3 foot, float a, float b, Vector3 hint)

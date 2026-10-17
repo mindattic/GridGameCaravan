@@ -65,6 +65,15 @@ namespace Lab.App
                 icons[s.Id] = ic;
             }
             walker = new WalkerRig2D(WalkerRig2D.View.Iso) { name = "walker", PixelsPerUnit = 13f, Ground = 0.82f };
+            // Rotate the foot's rig-local offset by the walker's current heading (the same rotation it already
+            // applies to its own geometry) to get a world-space offset from the town, then read this demo's own
+            // stepped terrain there — so each leg plants on the ground actually under it, cliffs included.
+            walker.GroundAt = (fx, fz) =>
+            {
+                float c = Mathf.Cos(walker.Heading), s = Mathf.Sin(walker.Heading);
+                float wx = L.Town.Pos.X + (fx * c - fz * s), wy = L.Town.Pos.Y + (fx * s + fz * c);
+                return Level(wx, wy) * (StepPx / walker.PixelsPerUnit);
+            };
             walker.style.position = Position.Absolute;
             walker.style.width = 520; walker.style.height = 520;
             view.Add(walker);
